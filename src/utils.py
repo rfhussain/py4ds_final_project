@@ -25,6 +25,42 @@ class SalesUtils():
         self.__today = str(DT.date.today())
         self.__submission_path = submission_path
 
+    def plot_sales_by_weekday(self,year,df):
+        df_tmp = df[df['year'] == year]
+        sold_by_weekday = pd.DataFrame(df_tmp.groupby('weekday')['item_cnt_day'].sum().reset_index().sort_values('item_cnt_day'))
+        sns.set_context("paper", font_scale=1.1)
+        fig , ax = plt.subplots(figsize=(15,7))
+        sns.barplot(x=sold_by_weekday.weekday,y=sold_by_weekday.item_cnt_day, order=sold_by_weekday.weekday)
+        del sold_by_weekday,df_tmp
+
+    def plot_sales_by_day(self,year,month,df):
+        try:
+            df_tmp = df[(df['year'] == year) & (df['month'] == month)]
+            sold_by_day = pd.DataFrame(df_tmp.groupby('day')['item_cnt_day'].sum().reset_index())
+            holidays = np.zeros(len(sold_by_day))
+
+            sns.set_context("paper", font_scale=1.1)
+            fig , ax = plt.subplots(figsize=(15,7))
+
+            t = df_tmp[df_tmp.is_holiday==1]['day'].unique()
+            for i in t: holidays[i-1]=1 
+            holidays = pd.DataFrame(holidays, columns=['is_holiday'])
+            sold_by_day = sold_by_day.merge(holidays, left_index=True, right_index=True)
+            sold_by_day['is_holiday'] = sold_by_day['is_holiday'].astype('int8')
+            sold_by_day = sold_by_day.sort_values(by='item_cnt_day', ascending=False)
+
+            del df_tmp
+
+            str_title = 'Year: ' + str(year) + ' : Month: '  + str(month)
+            
+            sns.barplot(x=sold_by_day.day,y=sold_by_day.item_cnt_day, hue=sold_by_day.is_holiday, dodge=False).set_title(str_title)
+            del sold_by_day
+        except:
+            print('')
+        
+
+
+
     def downcast_dtypes(self, df):
             '''
                 Changes column types in the dataframe: 
