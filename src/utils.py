@@ -25,6 +25,37 @@ class SalesUtils():
         self.__today = str(DT.date.today())
         self.__submission_path = submission_path
 
+    def plot_sales_by_x(self,x,year,df):
+        if ((year is not None) & (int(year)>1900)):
+            #print('yes')
+            df_tmp = df[df['year'] == year]
+        else:
+            print('no')
+            df_tmp = df
+            
+        sold_by_x = pd.DataFrame(df_tmp.groupby([x])['item_cnt_day'].sum().reset_index().sort_values('item_cnt_day'))
+        
+        print(type(sold_by_x))
+        
+        sns.set_context("paper", font_scale=1.1)
+        fig , ax = plt.subplots(figsize=(15,7))
+        sns.barplot(x=x,y='item_cnt_day', data=sold_by_x, dodge=False)
+        
+        #top 5 cities
+        if (x=='city_id'):
+            t5 = sold_by_x.sort_values(by='item_cnt_day',ascending=False)['city_id'].head(5).values
+            print('top 5 cities are :', t5)
+            
+        del sold_by_x,df_tmp
+
+    def plot_sales_by_city(self,year,df):
+        df_tmp = df[df['year'] == year]
+        sold_by_city = pd.DataFrame(df_tmp.groupby('city_id')['item_cnt_day'].sum().reset_index().sort_values('item_cnt_day'))
+        sns.set_context("paper", font_scale=1.1)
+        fig , ax = plt.subplots(figsize=(15,7))
+        sns.barplot(x=sold_by_city.weekday,y=sold_by_city.item_cnt_day, order=sold_by_city.weekday)
+        del sold_by_city,df_tmp
+
     def plot_sales_by_weekday(self,year,df):
         df_tmp = df[df['year'] == year]
         sold_by_weekday = pd.DataFrame(df_tmp.groupby('weekday')['item_cnt_day'].sum().reset_index().sort_values('item_cnt_day'))
@@ -210,6 +241,15 @@ class SalesUtils():
         return df
     
     def parse_shop_names(self, df):
+
+        '''
+        this function will extract the city name from the shops
+        will also add the city_id by applying the label encoding to it.
+
+        parameters
+        ----------------
+        df : data frame object for shops
+        '''
 
         translated_shops = ['Yakutsk Ordzhonikidze, 56 franc', 'Yakutsk shopping center Central fran', 'Adygea TC "Mega"', 'Balashikha shopping and entertainment complex "October-Kinomir"',
         'Volga Shopping Center Volga Mall ', 'Vologda shopping center "Marmalade"', 'Voronezh (Plekhanovskaya, 13)', 'Voronezh SEC "Maximir"', 'Voronezh SEC City-Park Grad',
