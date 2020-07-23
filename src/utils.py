@@ -27,7 +27,7 @@ class SalesUtils():
 
     def plot_sales_by_x(self,x,year,df):
         if ((year is not None) & (int(year)>1900)):
-            #print('yes')
+            #print('yes')   
             df_tmp = df[df['year'] == year]
         else:
             print('no')
@@ -260,8 +260,8 @@ class SalesUtils():
         'Moscow shopping center "MEGA Teply Stan" II', 'Moscow Shopping Center "New Century" (Novokosino)', 'Moscow shopping center "Perlovsky"', 'Moscow shopping center "Semenovsky"',
         'Moscow Shopping Center "Silver House"', 'Mytishchi TRK "XL-3"', 'N. Novgorod SEC "RIO"', 'N. Novgorod shopping and entertainment center “Fantasy”', 
         'Novosibirsk shopping center "Gallery Novosibirsk"', 'Novosibirsk shopping center "Mega"','Omsk shopping center Mega ', 
-        'Rostov-on-Don shopping and entertainment complex "Megacenter Horizon"', 'Rostov-on-Don shopping and entertainment complex Megacenter Horizon Island',
-        'RostovNaDon shopping center "Mega"', 'St. Petersburg TC "Nevsky Center"', 'Saint Petersburg shopping center Sennaya ', 'Samara shopping center Melody ',
+        'RostovNaDon shopping and entertainment complex "Megacenter Horizon"', 'RostovNaDon shopping and entertainment complex Megacenter Horizon Island',
+        'RostovNaDon shopping center "Mega"', 'St.Petersburg TC "Nevsky Center"', 'St.Petersburg shopping center Sennaya ', 'Samara shopping center Melody ',
         'Samara Shopping Center Park House', 'Sergiev Posad shopping center "7Я"', 'Surgut SEC "City Mall"', 'Tomsk shopping center "Emerald City"', 'Tyumen SEC "Crystal"',
         'Tyumen shopping center "Goodwin"', 'Tyumen shopping center "Green Beach"', 'Ufa shopping center "Central"', 'Ufa shopping center Family 2', 'Khimki shopping center Mega ',
         'Digital warehouse 1C-Online', 'Chekhov SEC "Carnival"', 'Yakutsk Ordzhonikidze, 56', 'Yakutsk shopping center "Central"', 'Yaroslavl Shopping Center Altair']
