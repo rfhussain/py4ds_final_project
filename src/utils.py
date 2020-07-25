@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import gc
+import os
 
 from tqdm import tqdm_notebook
 from datetime import datetime
@@ -25,6 +26,33 @@ class SalesUtils():
         self.__today = str(DT.date.today())
         self.__submission_path = submission_path
 
+    
+    def merge_sales_n_shops(self,data_folder,df):
+
+        # get the data-sets
+        df_items           = pd.read_csv(os.path.join(data_folder, 'items.csv'))
+        df_item_categories = pd.read_csv(os.path.join(data_folder, 'item_categories.csv'))
+        df_shops           = pd.read_csv(os.path.join(data_folder, 'shops.csv'))
+
+        ############    ITEMS      ##############
+        # parsing the item categories (i.e. adding the parent category on top of the item_category)
+        df_item_categories = self.parse_item_categories(df_item_categories)
+        # merging the items with item categories
+        df_items = df_items.merge(df_item_categories, how='inner', on=['item_category_id'])
+
+        ############    SHOPS      ##############
+        # Adding the city_id and city_name to the shops
+        df_shops = self.parse_shop_names(df_shops)
+
+        # merging the sales with the items
+        df = df.merge(df_items[['item_id','item_category_id','parent_cat_id','parent_cat']].drop_duplicates(), how='inner')
+
+        # merging the sales with the shops 
+        df = df.merge(df_shops[['shop_id','city_id','city_name']].drop_duplicates(), how='inner')
+
+        return df
+    
+    
     def plot_sales_by_x(self,x,year,df):
         if ((year is not None) & (int(year)>1900)):
             #print('yes')   
@@ -134,13 +162,20 @@ class SalesUtils():
         #turn the grid into pandas dataframe
         grid = pd.DataFrame(np.vstack(grid), columns=['shop_id', 'item_id', 'date_block_num','month'], dtype=np.int32)    
         
-        #get the aggregated value for (shop_id, item_id, month)
+
+        ############ SUM OF ITEM_CNT_DAY ..> TARGET ###########
+        #get the aggregated value for (shop_id, item_id, date_block_num)
         gb = df.groupby(self.__index_cols, as_index=False).agg({'item_cnt_day':'sum'})
         gb.rename(columns={'item_cnt_day':'target'}, inplace=True)
-        
         #joining the agregated data to the grid
         df_all_data = pd.merge(grid,gb, how='left', on=self.__index_cols).fillna(0)
-        
+
+        ############ SUM OF REVENUE ###########
+        #get the aggregated revenue for (shop_id, item_id, date_block_num)
+        gb = df.groupby(self.__index_cols, as_index=False).agg({'revenue':'sum'})        
+        #joining the agregated data to the grid
+        df_all_data = pd.merge(df_all_data,gb, how='left', on=self.__index_cols).fillna(0)
+
         
         # Same as above but with shop-month aggregates
         #gb = df.groupby(['shop_id', 'date_block_num'],as_index=False).agg({'item_cnt_day':{'target_shop':'sum'}})
@@ -149,10 +184,22 @@ class SalesUtils():
         #merge with main df
         df_all_data = pd.merge(df_all_data, gb, how='left', on=['shop_id', 'date_block_num']).fillna(0)
 
+        gb = df.groupby(['shop_id', 'date_block_num'],as_index=False).agg({'revenue':'sum'})
+        gb.rename(columns={'revenue':'revenue_shop'}, inplace=True)
+        #merge with main df
+        df_all_data = pd.merge(df_all_data, gb, how='left', on=['shop_id', 'date_block_num']).fillna(0)
+
+
         # Same as above but with item-month aggregates
         #gb = sales.groupby(['item_id', 'date_block_num'],as_index=False).agg({'item_cnt_day':{'target_item':'sum'}})
         gb = df.groupby(['item_id', 'date_block_num'],as_index=False).agg({'item_cnt_day':'sum'})
         gb.rename(columns={'item_cnt_day':'target_item'}, inplace=True)    
+        #merge with main df
+        df_all_data = pd.merge(df_all_data, gb, how='left', on=['item_id', 'date_block_num']).fillna(0)
+
+
+        gb = df.groupby(['item_id', 'date_block_num'],as_index=False).agg({'revenue':'sum'})
+        gb.rename(columns={'revenue':'revenue_item'}, inplace=True)    
         #merge with main df
         df_all_data = pd.merge(df_all_data, gb, how='left', on=['item_id', 'date_block_num']).fillna(0)
         
@@ -362,7 +409,14 @@ class SalesUtils():
         if 7 in features_to_add:
             dfmain = self.add_shop_id_mean_target(dfmain)
 
+        if 8 in features_to_add:
+            dfmain = self.add_city_id_mean_target(dfmain)
+
+        if 9 in features_to_add:
+            dfmain = self.add_shop_city_target_mean(dfmain)
+
         return dfmain
+
 
 
 
@@ -405,6 +459,15 @@ class SalesUtils():
         dfmain = dfmain.merge(df_shop_item_mean, on=['shop_id','item_id'], how='left')
         return dfmain
     
+    def add_shop_city_target_mean(self,dfmain):
+        '''
+        This function will group by the shop_id and city_id and add the mean         
+        '''
+        df_shop_item_mean = pd.DataFrame(dfmain.groupby(['shop_id','city_id'], as_index=False).target.mean())
+        df_shop_item_mean = df_shop_item_mean.rename(columns={'target':'shop_city_mean'})
+        dfmain = dfmain.merge(df_shop_item_mean, on=['shop_id','city_id'], how='left')
+        return dfmain
+
     def add_item_id_target_mean(self, dfmain):
         '''
         this function will calculate the item_id target_mean
@@ -415,24 +478,46 @@ class SalesUtils():
         return dfmain
 
     def add_month_mean_target(self, dfmain):
-        df_2013_2014 = dfmain[dfmain['date_block_num'] < 24]
+        df_2013_2014 = dfmain # dfmain[dfmain['date_block_num'] < 24]
         means = df_2013_2014.groupby('month').target.mean()
         dfmain['month_mean_target'] = dfmain['month'].map(means)
         return dfmain
 
     def add_parent_cat_mean_target(self, dfmain):
-        means_parent_cat = dfmain.groupby('parent_cat_id').target.mean() #calculating the mean from sales_train
-        dfmain['parent_cat_mean_target'] = dfmain['parent_cat_id'].map(means_parent_cat) #attaching the mean to the matrix dataframe (dfmain)
+        #calculating the mean from sales_train
+        means_parent_cat = dfmain.groupby('parent_cat_id').target.mean() 
+        #attaching the mean to the matrix dataframe (dfmain)
+        dfmain['parent_cat_mean_target'] = dfmain['parent_cat_id'].map(means_parent_cat) 
         return dfmain
 
     def add_item_category_mean_target(self, dfmain):
         means_cat = dfmain.groupby('item_category_id').target.mean()
         dfmain['item_cat_mean_target'] = dfmain['item_category_id'].map(means_cat)
+
+        means_cat = dfmain.groupby(['item_category_id','date_block_num'], as_index=False).target.mean()        
+        means_cat.rename(columns={'target':'item_cat_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means_cat, how ='left')
+
         return dfmain
     
     def add_shop_id_mean_target(self, dfmain):
         means_shops = dfmain.groupby('shop_id').target.mean()
         dfmain['shop_id_mean_target'] = dfmain['shop_id'].map(means_shops)
+
+        means_shops = dfmain.groupby(['shop_id','date_block_num'], as_index=False).target.mean()
+        means_shops.rename(columns={'target':'shop_id_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means_shops, how ='left')
+
+        return dfmain
+
+    def add_city_id_mean_target(self, dfmain):
+        means_city = dfmain.groupby('city_id').target.mean()
+        dfmain['city_id_mean_target'] = dfmain['city_id'].map(means_city)
+
+        means_city = dfmain.groupby(['city_id','date_block_num'], as_index=False).target.mean()        
+        means_city.rename(columns={'target':'city_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means_city, how ='left')
+        
         return dfmain
 
 
