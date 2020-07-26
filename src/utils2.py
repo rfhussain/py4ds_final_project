@@ -14,6 +14,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from fuzzywuzzy import fuzz
 
+from collections import Counter
+import re
+from operator import itemgetter
+
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -125,16 +130,107 @@ class SalesUtils():
 
         return df        
 
-    def merge_sales_n_shops(self,data_folder,df):
+    def __name_correction(self,x):
+        x = x.lower()
+        x = x.partition('[')[0]
+        x = x.partition('(')[0]
+        x = re.sub('[^A-Za-z0-9А-Яа-я]+', ' ', x)
+        re.sub('[^A-Za-z0-9А-Яа-я]+', ' ', x)
+        x = x.strip()
+        return x
+
+    def parse_items(self,df_items):
+        # creating two additional features
+        # note: 
+        # replace function if second argument passed as 1 i.e.############ replace('[',1)
+        # then it will only split in 2 values, although complete split may have been 5 pieces
+        df_items['name_1'], df_items['name_2'] = df_items['item_name'].str.split('[', 1).str # this case name_3 will be null
+        df_items['name_1'], df_items['name_3'] = df_items['item_name'].str.split('(', 1).str # this case name_2 will be null
+
+        # removing unwanted characters from name_2 and name_3
+        df_items['name_2'] = df_items['name_2'].str.replace('[^A-Za-z0-9А-Яа-я]+', ' ').str.lower()
+        df_items['name_3'] = df_items['name_3'].str.replace('[^A-Za-z0-9А-Яа-я]+', ' ').str.lower()
+        df_items = df_items.fillna('0')
+
+        ######################################################################
+        ############ TEMPORARY FEATURE SET, BUT NOT USED          ############
+        ######################################################################
+        df1 = Counter(' '.join(df_items['name_2'].values).split(' ')).items()
+        df1 = sorted(df1, key=itemgetter(1))
+        df1 = pd.DataFrame(df1, columns=['feature', 'count'])
+        df1.fillna(0)
+        df1 = df1[(df1['feature'].str.len() > 1) & (df1['count'] > 200)]
+
+        df2 = Counter(' '.join(df_items['name_3'].values).split(' ')).items()
+        df2 = sorted(df2, key=itemgetter(1))
+        df2 = pd.DataFrame(df2, columns=['feature', 'count'])
+        df2.fillna(0)
+        df2 = df2[(df2['feature'].str.len() > 1) & (df2['count'] > 200)]
+
+        item_feature_set = pd.concat([df1,df2])
+        item_feature_set = item_feature_set.drop_duplicates(subset=['feature']).reset_index(drop=True)
+
+        ######################################################################
+
+        # correcting the item name, and removing unwanted characters, empty spaces etc
+        df_items['item_name'] = df_items['item_name'] .apply(lambda x: self.__name_correction(x))
+
+        # removing the preceeding white space from name_2
+        df_items.name_2 = df_items.name_2.apply(lambda x: x[:-1] if x!='0' else '0')
+
+        ######################################################################
+        ############ TEMP FEATURE TYPE, IT WILL GO TO NAME_2      ############
+        ######################################################################
+        df_items['type'] = df_items.name_2.apply(lambda x: x[0:8] if x.split(' ')[0] == 'xbox' else x.split(' ')[0])
+        df_items.loc[(df_items.type == 'x360') | (df_items.type == 'xbox360'), 'type'] = 'xbox 360'
+        df_items.loc[df_items.type == '', 'type'] = 'mac'
+        df_items.type = df_items.type.apply(lambda x: x.replace(' ',''))
+
+        df_items.loc[(df_items.type == 'pc') | (df_items.type == 'pс') | (df_items.type == 'рс'), 'type'] = 'pc'
+        df_items.loc[(df_items.type == 'рs3'), 'type'] = 'ps3'
+
+        #the sum of all item_category_ids under a particular type should not be less than 200
+        group_sum = df_items.groupby('type', as_index=False).sum()
+        to_del_types = group_sum.loc[group_sum.item_category_id < 200].type.tolist() 
+
+        # apply it to name_2 and delete type field
+        df_items.name_2 = df_items.type.apply(lambda x: 'etc' if x in to_del_types else x)
+
+        # remove the type
+        df_items = df_items.drop(['type'], axis=1)
+
+        # apply label encoder, and remove the item_name, and name_1
+        df_items['name_2'] = LabelEncoder().fit_transform(df_items['name_2'])
+        df_items['name_3'] = LabelEncoder().fit_transform(df_items['name_3'])
+        df_items.drop(['item_name', 'name_1'], axis=1, inplace=True)
+
+        # return the items data frame
+        return df_items
+
+
+    def add_date_attributes(self, df):
+        dfmain = df
+        dfmain['day'] = dfmain['date'].dt.day
+        dfmain['month'] = dfmain['date'].dt.month
+        dfmain['weekday'] = dfmain['date'].dt.day_name()
+        dfmain['weekdayno'] = dfmain['date'].dt.dayofweek
+        dfmain['year'] = dfmain['date'].dt.year
+        return dfmain
+
+    def merge_items_sales_n_shops(self,df):
 
         # get the data-sets
-        df_items           = pd.read_csv(os.path.join(data_folder, 'items.csv'))
-        df_item_categories = pd.read_csv(os.path.join(data_folder, 'item_categories.csv'))
-        df_shops           = pd.read_csv(os.path.join(data_folder, 'shops.csv'))
+        df_items           = pd.read_csv(os.path.join(self.__input_path, 'items.csv'))
+        df_item_categories = pd.read_csv(os.path.join(self.__input_path, 'item_categories.csv'))
+        df_shops           = pd.read_csv(os.path.join(self.__input_path, 'shops.csv'))
 
         ############    ITEMS      ##############
         # parsing the item categories (i.e. adding the parent category on top of the item_category)
         df_item_categories = self.parse_item_categories(df_item_categories)
+
+        # parsing the items data set
+        df_items = self.parse_items(df_items)
+
         # merging the items with item categories
         df_items = df_items.merge(df_item_categories, how='inner', on=['item_category_id'])
 
@@ -143,7 +239,7 @@ class SalesUtils():
         df_shops = self.parse_shop_names(df_shops)
 
         # merging the sales with the items
-        df = df.merge(df_items[['item_id','item_category_id','parent_cat_id','parent_cat']].drop_duplicates(), how='inner')
+        df = df.merge(df_items, how='inner')
 
         # merging the sales with the shops 
         df = df.merge(df_shops[['shop_id','city_id','city_name']].drop_duplicates(), how='inner')
