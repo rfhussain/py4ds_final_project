@@ -5,6 +5,7 @@ import os
 
 from tqdm import tqdm_notebook
 from datetime import datetime
+import calendar
 from itertools import product
 #from googletrans import Translator 'doesn't work after sometime'
 from translate import Translator
@@ -130,6 +131,41 @@ class SalesUtils():
 
         return df        
 
+    def get_days_count(self):
+        '''
+        this function will return the number of sundays, saturdays, and num_days
+        that will be based on the date_block_num
+        '''
+        date_block_counter = 0
+        dbn = []
+        num_sat = []
+        num_sun = []
+        num_days = []
+
+        for year in [2013,2014,2015]:
+            for month in range(1,13):
+                
+                #addup the date block num
+                dbn.append(date_block_counter)
+                
+                #count saturday
+                num_sat.append(len([1 for i in calendar.monthcalendar(year,month) if i[calendar.SATURDAY] != 0]))
+                
+                #count sunday
+                num_sun.append(len([1 for i in calendar.monthcalendar(year,month) if i[calendar.SUNDAY] != 0]))
+                
+                #count total days
+                num_days.append(calendar.monthrange(year,month)[1])
+                
+                if date_block_counter == 34: break
+                date_block_counter+=1 
+                
+
+        week_day_count = pd.DataFrame(np.c_[dbn,num_sat,num_sun,num_days], columns=['date_block_num','num_sat','num_sun','num_days'])
+
+        return week_day_count
+
+
     def __name_correction(self,x):
         x = x.lower()
         x = x.partition('[')[0]
@@ -245,6 +281,79 @@ class SalesUtils():
         df = df.merge(df_shops[['shop_id','city_id','city_name']].drop_duplicates(), how='inner')
 
         return df
+    
+    def get_matrix_by_block(self, df):
+        '''
+        this function will convert the dataframe to matrix for shop_id/item_id with the constant of date_block_num
+        In other words, it will be a matrix of each month vertically stacked together
+        
+        input   : dataframe
+        output  : dataframe
+        '''
+        
+        grid = []
+
+        #loop through each block in the data
+        for block_num in tqdm_notebook(df['date_block_num'].unique()):
+            
+            cur_shops = df[df['date_block_num']==block_num]['shop_id'].unique()
+            cur_items = df[df['date_block_num']==block_num]['item_id'].unique()
+            cur_month = df[df['date_block_num']==block_num]['month'].unique()
+            
+            grid.append(np.array(list(product(*[cur_shops,cur_items,[block_num],[cur_month]])),dtype='int32'))
+            
+        #turn the grid into pandas dataframe
+        grid = pd.DataFrame(np.vstack(grid), columns=['shop_id', 'item_id', 'date_block_num','month'], dtype=np.int32)    
+        
+
+        ############ SUM OF ITEM_CNT_DAY ..> TARGET ###########
+        #get the aggregated value for (shop_id, item_id, date_block_num)
+        gb = df.groupby(self.__index_cols, as_index=False).agg({'item_cnt_day':'sum'})
+        gb.rename(columns={'item_cnt_day':'target'}, inplace=True)
+        #joining the agregated data to the grid
+        df_all_data = pd.merge(grid,gb, how='left', on=self.__index_cols).fillna(0)
+
+        ############ SUM OF REVENUE ###########
+        #get the aggregated revenue for (shop_id, item_id, date_block_num)
+        gb = df.groupby(self.__index_cols, as_index=False).agg({'revenue':'sum'})        
+        #joining the agregated data to the grid
+        df_all_data = pd.merge(df_all_data,gb, how='left', on=self.__index_cols).fillna(0)
+
+        
+        # Same as above but with shop-month aggregates
+        #gb = df.groupby(['shop_id', 'date_block_num'],as_index=False).agg({'item_cnt_day':{'target_shop':'sum'}})
+        gb = df.groupby(['shop_id', 'date_block_num'],as_index=False).agg({'item_cnt_day':'sum'})
+        gb.rename(columns={'item_cnt_day':'target_shop'}, inplace=True)
+        #merge with main df
+        df_all_data = pd.merge(df_all_data, gb, how='left', on=['shop_id', 'date_block_num']).fillna(0)
+
+        gb = df.groupby(['shop_id', 'date_block_num'],as_index=False).agg({'revenue':'sum'})
+        gb.rename(columns={'revenue':'revenue_shop'}, inplace=True)
+        #merge with main df
+        df_all_data = pd.merge(df_all_data, gb, how='left', on=['shop_id', 'date_block_num']).fillna(0)
+
+
+        # Same as above but with item-month aggregates
+        #gb = sales.groupby(['item_id', 'date_block_num'],as_index=False).agg({'item_cnt_day':{'target_item':'sum'}})
+        gb = df.groupby(['item_id', 'date_block_num'],as_index=False).agg({'item_cnt_day':'sum'})
+        gb.rename(columns={'item_cnt_day':'target_item'}, inplace=True)    
+        #merge with main df
+        df_all_data = pd.merge(df_all_data, gb, how='left', on=['item_id', 'date_block_num']).fillna(0)
+
+
+        gb = df.groupby(['item_id', 'date_block_num'],as_index=False).agg({'revenue':'sum'})
+        gb.rename(columns={'revenue':'revenue_item'}, inplace=True)    
+        #merge with main df
+        df_all_data = pd.merge(df_all_data, gb, how='left', on=['item_id', 'date_block_num']).fillna(0)
+        
+
+        del gb
+        del grid
+
+        #sorting values
+        df_all_data.sort_values(['date_block_num','shop_id','item_id'], inplace=True)
+        
+        return df_all_data    
 
 
 

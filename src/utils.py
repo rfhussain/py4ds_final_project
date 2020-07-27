@@ -294,7 +294,7 @@ class SalesUtils():
         will also add the city_id by applying the label encoding to it.
 
         parameters
-        ----------------
+        ----------------    
         df : data frame object for shops
         '''
 
