@@ -355,6 +355,149 @@ class SalesUtils():
         
         return df_all_data    
 
+    def add_mean_features(self, dfmain,features_to_add):
+
+        if 1 in features_to_add:
+            dfmain = self.add_expanding_mean(dfmain,['shop_id','item_id'])
+        
+        if 2 in features_to_add:
+            dfmain = self.add_shop_item_target_mean(dfmain)
+
+        if 3 in features_to_add:
+            dfmain = self.add_item_id_target_mean(dfmain)
+
+        if 4 in features_to_add:
+            dfmain = self.add_month_mean_target(dfmain)
+
+        if 5 in features_to_add:
+            dfmain = self.add_parent_cat_mean_target(dfmain)
+
+        if 6 in features_to_add:
+            dfmain = self.add_item_category_mean_target(dfmain)
+
+        if 7 in features_to_add:
+            dfmain = self.add_shop_id_mean_target(dfmain)
+
+        if 8 in features_to_add:
+            dfmain = self.add_city_id_mean_target(dfmain)
+
+        if 9 in features_to_add:
+            dfmain = self.add_shop_city_target_mean(dfmain)
+
+        if 10 in features_to_add:
+            dfmain = self.add_date_block_target_mean(dfmain)
+
+        return dfmain
+
+    def add_expanding_mean(self,df, cols_to_add):
+        
+        '''
+        This function will return the expanding mean 
+        example as follows:
+
+        city        target  cumsum  sumcount    city_expanding_mean
+        -----------------------------------------------------------
+        karachi     3       3       1           3.00
+        karachi     2       5       2           2.50
+        karachi     7       12      3           4.00
+        karachi     -1      11      4           2.75
+        karachi     4       5       5           3.00
+
+        '''
+        for col in cols_to_add:
+
+            global_mean = df['target'].mean()
+
+            cum_sum = df.groupby(col).target.cumsum() - df['target']
+            sum_cnt = df.groupby(col).cumcount()
+
+            #adding the expanding mean
+            df[col + '_exp_y_mean'] = cum_sum/sum_cnt
+
+            # filling the null
+            df[col + '_exp_y_mean'].fillna(global_mean, inplace=True)
+        
+        return df
+
+    def add_shop_item_target_mean(self,dfmain):
+        '''
+        This function will group by the shop_id and item_id and add the mean         
+        '''
+        df_shop_item_mean = pd.DataFrame(dfmain.groupby(['shop_id','item_id','date_block_num'], as_index=False).target.mean())
+        df_shop_item_mean.rename(columns={'target':'shop_item_db_mean'}, inplace=True)
+        dfmain = dfmain.merge(df_shop_item_mean, how='left')
+        return dfmain
+    
+    def add_shop_city_target_mean(self,dfmain):
+        '''
+        This function will group by the shop_id and city_id and add the mean         
+        '''
+        df_shop_city_mean = pd.DataFrame(dfmain.groupby(['shop_id','city_id'], as_index=False).target.mean())
+        df_shop_city_mean.rename(columns={'target':'shop_city_mean'}, inplace=True)
+        dfmain = dfmain.merge(df_shop_city_mean, how='left')
+        return dfmain
+
+    def add_item_id_target_mean(self, dfmain):
+        '''
+        this function will calculate the item_id target_mean
+        '''
+        means = dfmain.groupby(['item_id','date_block_num'], as_index=False).target.mean()
+        means.rename(columns={'target':'item_id_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means, how='left')
+        return dfmain
+
+    def add_month_mean_target(self, dfmain):
+        df_2013_2014 = dfmain # dfmain[dfmain['date_block_num'] < 24]
+        means = df_2013_2014.groupby('month').target.mean()
+        dfmain['month_mean_target'] = dfmain['month'].map(means)
+        return dfmain
+
+    def add_parent_cat_mean_target(self, dfmain):
+        # calculating the mean from sales_train
+        means_parent_cat = dfmain.groupby(['parent_cat_id','date_block_num'], as_index=False).target.mean() 
+        # renaming the column and merging
+        means_parent_cat.rename(columns={'target':'parent_cat_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means_parent_cat, how ='left')
+        return dfmain
+
+    def add_item_category_mean_target(self, dfmain):
+        means_cat = dfmain.groupby(['item_category_id','date_block_num'], as_index=False).target.mean()        
+        means_cat.rename(columns={'target':'item_cat_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means_cat, how ='left')
+        return dfmain
+    
+    def add_shop_id_mean_target(self, dfmain):
+        means_shops = dfmain.groupby(['shop_id','date_block_num'], as_index=False).target.mean()
+        means_shops.rename(columns={'target':'shop_id_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means_shops, how ='left')
+        return dfmain
+
+    def add_city_id_mean_target(self, dfmain):
+        means_city = dfmain.groupby(['city_id','date_block_num'], as_index=False).target.mean()        
+        means_city.rename(columns={'target':'city_db_mean_target'}, inplace=True)
+        dfmain = dfmain.merge(means_city, how ='left')
+        return dfmain
+
+    def add_date_block_target_mean(self,dfmain):
+        db_mean = dfmain.groupby('date_block_num').target.mean()
+        dfmain['db_target_mean'] = dfmain['date_block_num'].map(db_mean)
+        return dfmain
+    
+    def add_lags(self, df, shift_range, exception_cols):
+        cols_to_rename = list(df.columns.difference(self.__index_cols + exception_cols)) 
+
+        for month_shift in tqdm_notebook(shift_range):
+            train_shift = df[self.__index_cols + cols_to_rename].copy()
+
+            train_shift['date_block_num'] = train_shift['date_block_num'] + month_shift
+
+            foo = lambda x: '{}_lag_{}'.format(x, month_shift) if x in cols_to_rename else x
+            train_shift = train_shift.rename(columns=foo)
+
+            df = pd.merge(df, train_shift, on=self.__index_cols, how='left').fillna(0)
+
+        return df
+
 
 
 
