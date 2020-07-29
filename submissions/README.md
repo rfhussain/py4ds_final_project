@@ -42,10 +42,87 @@ removing 'target_lag_12', 'target_item_lag_12','target_shop_lag_12'
 IMPORTANT: 
 change to be added: same configuration, but with lag_4, and means (both db and non db for shop_id, item_id and others)
 
+# Submissions on 29-Jul-2020 # 1
+
+## Kaggle
+
+### Changes 
+- Added Lag_4 for target, target_shop & target_item
+- Added shop_id_mean_target
+
+### Fit Columns
+
+Total 29 as follows: 
+
+```
+'shop_id', 'item_id', 'item_category_id', 'name_2', 'name_3',
+'num_days', 'revenue_lag_1', 'target_lag_1', 'target_item_lag_1',
+'target_shop_lag_1', 'target_lag_2', 'target_item_lag_2',
+'target_shop_lag_2', 'target_lag_3', 'target_item_lag_3',
+'target_shop_lag_3', 'target_lag_4', 'target_item_lag_4',
+'target_shop_lag_4', 'target_lag_12', 'target_item_lag_12',
+'target_shop_lag_12', 'month_mean_target', 'parent_cat_id_mean_target',
+'parent_cat_db_mean_target', 'item_cat_mean_target',
+'shop_id_mean_target', 'shop_city_mean', 'db_target_mean'
+```
 
 
 
+```
+lgb_params = {
+               'feature_fraction': 0.75,
+               'metric': 'rmse',
+               'nthread':-1, 
+               'min_data_in_leaf': 2**7, 
+               'bagging_fraction': 0.75, 
+               'learning_rate': 0.03, 
+               'objective': 'mse', 
+               'bagging_seed': 2**7, 
+               'num_leaves': 2**7,
+               'bagging_freq':1,
+               'verbose':1,
+               'lambda_l1': 0.001,
+               'lambda_l2': 0.001
+              }
+
+model = lgb.train(lgb_params, 
+                  lgb.Dataset(X_train,label=y_train), 
+                  300 , #categorical_feature=cat_features, 
+                  valid_sets=lgb.Dataset(X_valid,label=y_valid), verbose_eval=True,
+                 early_stopping_rounds=15)
+
+```
+
+### Results on Kaggle:
+
+```
+File: 29jul2020_lgb_all_feat_17.csv
+Early stopping, best iteration is: [225]	valid_0's rmse: 0.902938
+Kaggle: 0.91481 (Best Score ... top 24%)
+```
 
 
+# Submissions on 29-Jul-2020 # 2
 
+### Changes 
+added an attribute: shop_id_exp_y_mean
+rest remains the same as above
 
+### Results on Kaggle:
+```
+File: 29jul2020_lgb_all_feat_18.csv
+Early stopping, best iteration is: [269]	valid_0's rmse: 0.903695
+Kaggle: 0.92030
+```
+
+# Submissions on 29-Jul-2020 # 3
+
+### Changes 
+No changes, even the model is not trained this time, except using the predictions for 
+29jul2020_lgb_all_feat_18.csv and 29jul2020_lgb_all_feat_17.csv
+and averaging them to see if this improves the results. 
+
+```
+File: 29jul2020_lgb_all_feat_17_18_avg.csv
+Kaggle: 0.91675
+```
