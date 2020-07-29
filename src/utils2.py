@@ -458,7 +458,7 @@ class SalesUtils():
         dfmain['parent_cat_id_mean_target'] = dfmain['parent_cat_id'].map(tmpmeans)
 
         # calculating the mean from sales_train
-        means_parent_cat = dfmain.groupby(['parent_cat_id','date_block_num']).target.mean() 
+        means_parent_cat = dfmain.groupby(['parent_cat_id','date_block_num'], as_index=False).target.mean() 
         # renaming the column and merging
         means_parent_cat.rename(columns={'target':'parent_cat_db_mean_target'}, inplace=True)
         dfmain = dfmain.merge(means_parent_cat, how ='left')
