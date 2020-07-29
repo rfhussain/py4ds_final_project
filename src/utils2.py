@@ -453,20 +453,34 @@ class SalesUtils():
         return dfmain
 
     def add_parent_cat_mean_target(self, dfmain):
+        # adding the means with out date block number    
+        tmpmeans = dfmain.groupby('parent_cat_id').target.mean()
+        dfmain['parent_cat_id_mean_target'] = dfmain['parent_cat_id'].map(tmpmeans)
+
         # calculating the mean from sales_train
-        means_parent_cat = dfmain.groupby(['parent_cat_id','date_block_num'], as_index=False).target.mean() 
+        means_parent_cat = dfmain.groupby(['parent_cat_id','date_block_num']).target.mean() 
         # renaming the column and merging
         means_parent_cat.rename(columns={'target':'parent_cat_db_mean_target'}, inplace=True)
         dfmain = dfmain.merge(means_parent_cat, how ='left')
         return dfmain
 
     def add_item_category_mean_target(self, dfmain):
+
+        # adding the means with out date block number    
+        tmpmeans = dfmain.groupby('item_category_id').target.mean()
+        dfmain['item_cat_mean_target'] = dfmain['item_category_id'].map(tmpmeans)
+
         means_cat = dfmain.groupby(['item_category_id','date_block_num'], as_index=False).target.mean()        
         means_cat.rename(columns={'target':'item_cat_db_mean_target'}, inplace=True)
         dfmain = dfmain.merge(means_cat, how ='left')
         return dfmain
     
     def add_shop_id_mean_target(self, dfmain):
+
+        # adding the means with out date block number    
+        tmpmeans = dfmain.groupby('shop_id').target.mean()
+        dfmain['shop_id_mean_target'] = dfmain['shop_id'].map(tmpmeans)
+
         means_shops = dfmain.groupby(['shop_id','date_block_num'], as_index=False).target.mean()
         means_shops.rename(columns={'target':'shop_id_db_mean_target'}, inplace=True)
         dfmain = dfmain.merge(means_shops, how ='left')
@@ -497,6 +511,15 @@ class SalesUtils():
             df = pd.merge(df, train_shift, on=self.__index_cols, how='left').fillna(0)
 
         return df
+
+    def save_submission(self, model_name, df):
+        '''
+        The function will construct the file submission name, and save it to the specified path for submissions
+        '''
+        file_name =  'sub_' + model_name
+        save_path = self.__submission_path + '\\' + file_name + '_' + str(self.__today) + '.csv'
+        df.to_csv(save_path, index=False)
+        print('Submission file saved as ' + save_path)
 
 
 
